@@ -732,11 +732,14 @@
 
       <div class="ebay-row" id="ebay-row">
         <span class="ebay-icon">🏷</span>
-        <div>
-          <div style="font-size:12px;font-weight:600;color:var(--navy)">eBay Recent Sales</div>
-          <div class="ebay-label" id="ebay-range">Searching...</div>
+        <div style="flex:1;">
+          <div style="font-size:12px;font-weight:600;color:var(--navy)">eBay Sold Prices</div>
+          <div class="ebay-label" id="ebay-range">Scan a card to look up pricing</div>
         </div>
-        <span class="ebay-loading" id="ebay-price">⏳</span>
+        <a id="ebay-link" href="#" target="_blank" rel="noopener"
+          style="display:none;padding:6px 12px;background:var(--navy);color:var(--white);border-radius:6px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:600;text-decoration:none;white-space:nowrap;">
+          View Sold →
+        </a>
       </div>
 
       <div class="result-grid" id="result-form">
@@ -933,6 +936,9 @@ let pendingCard = null;
 const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbx-TqscnrH9oVqOkO9JHMSeiZCw12nqdZaJnhqFUOhCt-kCnTntnJjzwSxYoVjOUp-X/exec';
 
 window.onload = () => {
+  // Load any previously saved session log
+  loadPersistedLog();
+
   // Pre-fill settings panel with hardcoded URL
   document.getElementById('sheets-url-saved').value = SHEETS_URL;
   document.getElementById('sheets-url-badge').style.display = 'flex';
@@ -1195,160 +1201,116 @@ function setChipVal(key, val) {
   });
 }
 
-// ── COMBINED TCDB + EBAY LOOKUP (single API call) ──────────────────────────
+// ── TCDB LOOKUP (free — direct scrape, no API cost) ────────────────────────
 let tcdbData = null;
 
+function buildEbayUrl(query) {
+  return `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Complete=1&LH_Sold=1&_sop=13`;
+}
+
+function showEbayLink(query) {
+  const ebayRow = document.getElementById('ebay-row');
+  const ebayLink = document.getElementById('ebay-link');
+  const ebayRange = document.getElementById('ebay-range');
+
+  ebayRow.style.display = 'flex';
+  ebayLink.href = buildEbayUrl(query);
+  ebayLink.style.display = 'inline-block';
+  ebayRange.textContent = `"${query}"`;
+}
+
 async function fetchTCDBAndEbay(card) {
-  // Show both UI rows as loading
+  // ── Show TCDB as loading ──
   const tcdbRow = document.getElementById('tcdb-row');
   const tcdbStatus = document.getElementById('tcdb-status');
   tcdbRow.style.display = 'block';
   tcdbStatus.textContent = 'Searching...';
+  tcdbStatus.style.color = 'var(--gray-400)';
 
-  document.getElementById('ebay-row').style.display = 'flex';
-  document.getElementById('ebay-range').textContent = 'Searching...';
-  document.getElementById('ebay-price').textContent = '⏳';
+  // ── Show eBay link immediately (no API call needed) ──
+  const ebayQuery = card.ebay_search_query ||
+    [card.player, card.year, card.brand, card.series, card.parallel].filter(Boolean).join(' ');
+  showEbayLink(ebayQuery);
 
-  const searchQuery = [card.player, card.year, card.brand, card.series, card.parallel]
-    .filter(Boolean).join(' ');
-
-  const ebayQuery = card.ebay_search_query || searchQuery;
-
-  const prompt = `You have TWO tasks. Search the web and return ONLY a JSON object with both results combined.
-
-TASK 1 — TCDB LOOKUP:
-Search the Trading Card Database (tcdb.com) and other card databases for this baseball card: "${searchQuery}".
-Find the most likely match.
-
-TASK 2 — EBAY SOLD PRICES:
-Search eBay SOLD listings (not active listings) for: "${ebayQuery}".
-Look for completed sales in the last 90 days. Find at least 3-5 sold prices if available.
-
-Return ONLY this JSON — no other text, no markdown fences:
-{
-  "tcdb": {
-    "found": true,
-    "year": "",
-    "brand": "",
-    "series": "",
-    "card_number": "",
-    "player": "",
-    "team": "",
-    "set_name": "",
-    "tcdb_url": "",
-    "notes": ""
-  },
-  "ebay": {
-    "low": "",
-    "high": "",
-    "avg": "",
-    "note": ""
-  }
-}
-
-Rules:
-- For TCDB: if no confident match, set "found": false and leave other fields empty. Only return fields you are confident about.
-- For eBay: all price values are USD strings without $. Base avg on actual sold prices, not asking prices. If no sold data found, use empty strings.
-- Return ONLY the JSON object, nothing else.`;
-
+  // ── TCDB lookup via free server-side scrape ──
   try {
-    const resp = await fetch('/api/scan', {
+    const resp = await fetch('/api/tcdb', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{ role: 'user', content: prompt }]
+        player: card.player,
+        year: card.year,
+        brand: card.brand,
+        series: card.series,
+        card_number: card.card_number,
+        parallel: card.parallel,
       })
     });
 
-    if (!resp.ok) throw new Error('Search failed');
-    const data = await resp.json();
-    const textBlock = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
-    const clean = textBlock.replace(/```json|```/g, '').trim();
-    const match = clean.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('No JSON');
-    const combined = JSON.parse(match[0]);
+    if (!resp.ok) throw new Error('TCDB lookup failed');
+    const result = await resp.json();
 
-    // ── Handle TCDB result ──
-    const result = combined.tcdb || {};
     if (!result.found) {
       tcdbStatus.textContent = 'No match found';
       tcdbStatus.style.color = 'var(--gray-400)';
-    } else {
-      tcdbData = result;
-      const currentForm = readForm();
-      const fields = [
-        { key: 'year',        label: 'Year',         form: currentForm.year,        tcdb: result.year },
-        { key: 'brand',       label: 'Brand',        form: currentForm.brand,       tcdb: result.brand },
-        { key: 'series',      label: 'Series',       form: currentForm.series,      tcdb: result.series },
-        { key: 'card_number', label: 'Card #',       form: currentForm.card_number, tcdb: result.card_number },
-        { key: 'player',      label: 'Player',       form: currentForm.player,      tcdb: result.player },
-        { key: 'team',        label: 'Team',         form: currentForm.team,        tcdb: result.team },
-      ];
-
-      const diffs = fields.filter(f =>
-        f.tcdb && f.form &&
-        f.tcdb.trim().toLowerCase() !== f.form.trim().toLowerCase()
-      );
-      const blanks = fields.filter(f => f.tcdb && !f.form);
-
-      if (diffs.length === 0 && blanks.length === 0) {
-        tcdbStatus.textContent = '✓ Confirmed';
-        tcdbStatus.style.color = '#2db36e';
-        document.getElementById('tcdb-body').style.display = 'block';
-        document.getElementById('tcdb-match-info').innerHTML =
-          `<strong style="color:var(--green)">✓ Database match confirmed</strong><br>${result.set_name || ''}${result.tcdb_url ? ` · <a href="${result.tcdb_url}" target="_blank" style="color:var(--navy-mid)">View on TCDB →</a>` : ''}`;
-        document.getElementById('tcdb-diffs').innerHTML = '';
-        document.getElementById('tcdb-apply-btn').style.display = 'none';
-      } else {
-        tcdbStatus.textContent = `${diffs.length + blanks.length} discrepancies`;
-        tcdbStatus.style.color = '#e67e22';
-        document.getElementById('tcdb-body').style.display = 'block';
-        document.getElementById('tcdb-match-info').innerHTML =
-          `TCDB found: <strong>${result.set_name || [result.year, result.brand, result.series].filter(Boolean).join(' ')}</strong>${result.tcdb_url ? ` · <a href="${result.tcdb_url}" target="_blank" style="color:var(--navy-mid)">View →</a>` : ''}`;
-
-        const diffsEl = document.getElementById('tcdb-diffs');
-        diffsEl.innerHTML = '';
-        [...diffs, ...blanks].forEach(f => {
-          const div = document.createElement('div');
-          div.style.cssText = 'display:grid;grid-template-columns:70px 1fr 1fr;gap:6px;align-items:center;font-size:11px;padding:6px 8px;background:var(--gray-100);border-radius:6px;';
-          div.innerHTML = `
-            <span style="font-weight:700;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.5px;">${f.label}</span>
-            <span style="color:var(--red);text-decoration:${f.form ? 'line-through' : 'none'};opacity:${f.form ? '0.7' : '0.4'}">${f.form || '(blank)'}</span>
-            <span style="color:var(--green);font-weight:600;">${f.tcdb}</span>
-          `;
-          diffsEl.appendChild(div);
-        });
-
-        const legend = document.createElement('div');
-        legend.style.cssText = 'display:grid;grid-template-columns:70px 1fr 1fr;gap:6px;font-size:10px;color:var(--gray-400);padding:0 8px;';
-        legend.innerHTML = '<span></span><span>From image</span><span>From TCDB</span>';
-        diffsEl.insertBefore(legend, diffsEl.firstChild);
-      }
+      return;
     }
 
-    // ── Handle eBay result ──
-    const prices = combined.ebay || {};
-    if (prices.avg) {
-      document.getElementById('ebay-price').textContent = `~$${prices.avg}`;
-      document.getElementById('ebay-price').style.color = 'var(--green)';
-      document.getElementById('ebay-range').textContent = `$${prices.low || '?'} – $${prices.high || '?'} · ${prices.note || ''}`;
-      if (!document.getElementById('f-value').value && prices.avg) {
-        document.getElementById('f-value').value = prices.avg;
-      }
+    tcdbData = result;
+    const currentForm = readForm();
+    const fields = [
+      { key: 'year',        label: 'Year',         form: currentForm.year,        tcdb: result.year },
+      { key: 'brand',       label: 'Brand',        form: currentForm.brand,       tcdb: result.brand },
+      { key: 'series',      label: 'Series',       form: currentForm.series,      tcdb: result.series },
+      { key: 'card_number', label: 'Card #',       form: currentForm.card_number, tcdb: result.card_number },
+      { key: 'player',      label: 'Player',       form: currentForm.player,      tcdb: result.player },
+      { key: 'team',        label: 'Team',         form: currentForm.team,        tcdb: result.team },
+    ];
+
+    const diffs = fields.filter(f =>
+      f.tcdb && f.form &&
+      f.tcdb.trim().toLowerCase() !== f.form.trim().toLowerCase()
+    );
+    const blanks = fields.filter(f => f.tcdb && !f.form);
+
+    if (diffs.length === 0 && blanks.length === 0) {
+      tcdbStatus.textContent = '✓ Confirmed';
+      tcdbStatus.style.color = '#2db36e';
+      document.getElementById('tcdb-body').style.display = 'block';
+      document.getElementById('tcdb-match-info').innerHTML =
+        `<strong style="color:var(--green)">✓ Database match confirmed</strong><br>${result.set_name || ''}${result.tcdb_url ? ` · <a href="${result.tcdb_url}" target="_blank" style="color:var(--navy-mid)">View on TCDB →</a>` : ''}`;
+      document.getElementById('tcdb-diffs').innerHTML = '';
+      document.getElementById('tcdb-apply-btn').style.display = 'none';
     } else {
-      document.getElementById('ebay-price').textContent = 'No data';
-      document.getElementById('ebay-range').textContent = 'Could not find recent sales';
+      tcdbStatus.textContent = `${diffs.length + blanks.length} discrepancies`;
+      tcdbStatus.style.color = '#e67e22';
+      document.getElementById('tcdb-body').style.display = 'block';
+      document.getElementById('tcdb-match-info').innerHTML =
+        `TCDB found: <strong>${result.set_name || [result.year, result.brand, result.series].filter(Boolean).join(' ')}</strong>${result.tcdb_url ? ` · <a href="${result.tcdb_url}" target="_blank" style="color:var(--navy-mid)">View →</a>` : ''}`;
+
+      const diffsEl = document.getElementById('tcdb-diffs');
+      diffsEl.innerHTML = '';
+      [...diffs, ...blanks].forEach(f => {
+        const div = document.createElement('div');
+        div.style.cssText = 'display:grid;grid-template-columns:70px 1fr 1fr;gap:6px;align-items:center;font-size:11px;padding:6px 8px;background:var(--gray-100);border-radius:6px;';
+        div.innerHTML = `
+          <span style="font-weight:700;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.5px;">${f.label}</span>
+          <span style="color:var(--red);text-decoration:${f.form ? 'line-through' : 'none'};opacity:${f.form ? '0.7' : '0.4'}">${f.form || '(blank)'}</span>
+          <span style="color:var(--green);font-weight:600;">${f.tcdb}</span>
+        `;
+        diffsEl.appendChild(div);
+      });
+
+      const legend = document.createElement('div');
+      legend.style.cssText = 'display:grid;grid-template-columns:70px 1fr 1fr;gap:6px;font-size:10px;color:var(--gray-400);padding:0 8px;';
+      legend.innerHTML = '<span></span><span>From image</span><span>From TCDB</span>';
+      diffsEl.insertBefore(legend, diffsEl.firstChild);
     }
 
   } catch(err) {
     tcdbStatus.textContent = 'Lookup failed';
     tcdbStatus.style.color = 'var(--gray-400)';
-    document.getElementById('ebay-price').textContent = 'N/A';
-    document.getElementById('ebay-range').textContent = 'Search unavailable';
-    console.error('TCDB+eBay error:', err);
+    console.error('TCDB error:', err);
   }
 }
 
@@ -1363,9 +1325,9 @@ function applyTCDB() {
   if (tcdbData.notes && !document.getElementById('f-notes').value)
     document.getElementById('f-notes').value = tcdbData.notes;
 
-  // Update eBay search with corrected data
+  // Update eBay link with corrected data (free — just rebuilds the URL)
   const newQuery = [tcdbData.year, tcdbData.brand, tcdbData.player, tcdbData.series].filter(Boolean).join(' ');
-  fetchEbayEstimate(newQuery, tcdbData);
+  showEbayLink(newQuery);
 
   document.getElementById('tcdb-status').textContent = '✓ Applied';
   document.getElementById('tcdb-status').style.color = '#2db36e';
@@ -1379,58 +1341,6 @@ function dismissTCDB() {
   document.getElementById('tcdb-status').style.color = 'var(--gray-400)';
 }
 
-
-async function fetchEbayEstimate(query, card) {
-  document.getElementById('ebay-row').style.display = 'flex';
-  document.getElementById('ebay-range').textContent = `Searching: "${query}"`;
-  document.getElementById('ebay-price').textContent = '⏳';
-
-  const prompt = `Search eBay SOLD listings (not active listings) for this baseball card: "${query}". Look for completed sales in the last 90 days. Find at least 3-5 sold prices if available and calculate the average, low, and high. 
-Return ONLY a JSON object with these keys:
-{
-  "low": "12.00",
-  "high": "45.00", 
-  "avg": "28.50",
-  "note": "Avg of 5 sold listings, last 90 days"
-}
-All values are USD strings without the $ sign. Base the avg on actual sold prices, not asking prices. If you cannot find sold listing data, use empty strings.`;
-
-  try {
-    const resp = await fetch('/api/scan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-
-    if (!resp.ok) throw new Error('Search failed');
-    const data = await resp.json();
-    const textBlock = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
-    const clean = textBlock.replace(/```json|```/g, '').trim();
-    const match = clean.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('No JSON');
-    const prices = JSON.parse(match[0]);
-
-    if (prices.avg) {
-      document.getElementById('ebay-price').textContent = `~$${prices.avg}`;
-      document.getElementById('ebay-price').style.color = 'var(--green)';
-      document.getElementById('ebay-range').textContent = `$${prices.low || '?'} – $${prices.high || '?'} · ${prices.note || ''}`;
-      if (!document.getElementById('f-value').value && prices.avg) {
-        document.getElementById('f-value').value = prices.avg;
-      }
-    } else {
-      document.getElementById('ebay-price').textContent = 'No data';
-      document.getElementById('ebay-range').textContent = 'Could not find recent sales';
-    }
-  } catch {
-    document.getElementById('ebay-price').textContent = 'N/A';
-    document.getElementById('ebay-range').textContent = 'Search unavailable';
-  }
-}
 
 // ── READ FORM ──────────────────────────────────────────────────────────────
 function readForm() {
@@ -1542,9 +1452,53 @@ function copyAppsScript() {
 
 // ── SESSION LOG ────────────────────────────────────────────────────────────
 function addToLog(card) {
-  sessionLog.push(card);
+  // Store a copy without the full base64 image (too large for localStorage)
+  const logCard = { ...card };
+  // Keep a tiny thumbnail for the log display, but cap at 20KB
+  if (logCard.image && logCard.image.length > 20000) {
+    // Create a small thumbnail
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = 60; c.height = 84;
+      c.getContext('2d').drawImage(img, 0, 0, 60, 84);
+      logCard.image = c.toDataURL('image/jpeg', 0.5);
+      sessionLog.push(logCard);
+      persistLog();
+      renderLog();
+      updateHeaderCount();
+    };
+    img.src = logCard.image;
+    return;
+  }
+  sessionLog.push(logCard);
+  persistLog();
   renderLog();
   updateHeaderCount();
+}
+
+function persistLog() {
+  try {
+    localStorage.setItem('cardvault_log', JSON.stringify(sessionLog));
+  } catch (e) {
+    // localStorage full — silently continue, data is still in memory
+    console.warn('localStorage full, session log not persisted:', e);
+  }
+}
+
+function loadPersistedLog() {
+  try {
+    const saved = localStorage.getItem('cardvault_log');
+    if (saved) {
+      sessionLog = JSON.parse(saved);
+      if (sessionLog.length > 0) {
+        renderLog();
+        updateHeaderCount();
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load persisted log:', e);
+  }
 }
 
 function renderLog() {
@@ -1575,6 +1529,7 @@ function updateHeaderCount() {
 
 function clearLog() {
   sessionLog = [];
+  localStorage.removeItem('cardvault_log');
   document.getElementById('log-panel').style.display = 'none';
   document.getElementById('header-count').style.display = 'none';
 }
@@ -1596,6 +1551,8 @@ function resetScan() {
   document.getElementById('result-panel').style.display = 'none';
   document.getElementById('scan-panel').style.display = 'block';
   document.getElementById('ebay-row').style.display = 'none';
+  document.getElementById('ebay-link').style.display = 'none';
+  document.getElementById('ebay-range').textContent = 'Scan a card to look up pricing';
   document.getElementById('tcdb-row').style.display = 'none';
   document.getElementById('tcdb-body').style.display = 'none';
   chipState = { rookie: 'No', auto: 'No', relic: 'No' };
