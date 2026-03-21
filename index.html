@@ -908,13 +908,12 @@ let sessionLog = [];
 let pendingCard = null;
 
 // ── INIT ──────────────────────────────────────────────────────────────────
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbx-TqscnrH9oVqOkO9JHMSeiZCw12nqdZaJnhqFUOhCt-kCnTntnJjzwSxYoVjOUp-X/exec';
+
 window.onload = () => {
-  // Load saved sheets URL from localStorage
-  const savedUrl = localStorage.getItem('cv_sheets_url') || '';
-  if (savedUrl) {
-    document.getElementById('sheets-url-saved').value = savedUrl;
-    document.getElementById('sheets-url-badge').style.display = 'flex';
-  }
+  // Pre-fill settings panel with hardcoded URL
+  document.getElementById('sheets-url-saved').value = SHEETS_URL;
+  document.getElementById('sheets-url-badge').style.display = 'flex';
   // drag/drop
   const zone = document.getElementById('scan-zone-front');
   zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragging'); });
@@ -1272,37 +1271,22 @@ function cardToCSVRow(c) {
 
 // ── LOG TO SHEETS ──────────────────────────────────────────────────────────
 function saveSheetUrl(val) {
+  // URL is hardcoded — this just updates the visual badge
   if (val && val.includes('script.google.com')) {
-    localStorage.setItem('cv_sheets_url', val);
     document.getElementById('sheets-url-badge').style.display = 'flex';
   } else {
-    localStorage.removeItem('cv_sheets_url');
     document.getElementById('sheets-url-badge').style.display = 'none';
   }
 }
 
 function logToSheets() {
-  const savedUrl = localStorage.getItem('cv_sheets_url') || '';
-  if (savedUrl) {
-    // URL already saved — send directly without showing modal
-    sendToSheets(savedUrl);
-  } else {
-    // No URL saved yet — show modal to get it
-    document.getElementById('sheets-url-input').value = '';
-    document.getElementById('sheets-modal').classList.add('open');
-  }
+  sendToSheets(SHEETS_URL);
 }
 function closeModal() { document.getElementById('sheets-modal').classList.remove('open'); }
 
 async function confirmSheetsLog() {
-  const url = document.getElementById('sheets-url-input').value.trim();
-  if (!url.includes('script.google.com')) { showToast('Paste a valid Apps Script URL', 'error'); return; }
-  // Save to localStorage and update settings panel
-  localStorage.setItem('cv_sheets_url', url);
-  document.getElementById('sheets-url-saved').value = url;
-  document.getElementById('sheets-url-badge').style.display = 'flex';
   closeModal();
-  sendToSheets(url);
+  sendToSheets(SHEETS_URL);
 }
 
 async function sendToSheets(url) {
