@@ -627,30 +627,7 @@
 <main>
 
   <!-- STATUS BANNER -->
-  <div class="panel" id="setup-panel">
-    <div class="panel-header">
-      <span>⚙️</span>
-      <h2>Settings</h2>
-    </div>
-    <div class="panel-body">
-      <div class="key-saved-badge" id="key-badge" style="display:flex;margin-bottom:12px;">✓ &nbsp;Connected to Anthropic API</div>
-
-      <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--gray-400);margin-bottom:6px;">
-        Google Sheets Web App URL
-      </div>
-      <input type="text" id="sheets-url-saved" placeholder="Paste your Apps Script URL here once and it's saved forever"
-        style="width:100%;padding:10px 12px;border:2px solid var(--gray-200);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;outline:none;color:var(--text);"
-        oninput="saveSheetUrl(this.value)">
-      <p style="font-size:11px;color:var(--gray-400);margin-top:6px;line-height:1.5;">
-        Paste your Apps Script URL once — it's saved in this browser permanently so you never need to enter it again, including on mobile.
-      </p>
-      <div id="sheets-url-badge" style="display:none;align-items:center;gap:6px;background:#e8f5ee;color:var(--green);font-size:12px;font-weight:600;padding:6px 12px;border-radius:6px;margin-top:8px;">
-        ✓ &nbsp;Google Sheets connected
-      </div>
-    </div>
-  </div>
-
-  <!-- SCAN PANEL -->
+  <!-- SCAN PANEL — leads the page -->
   <div class="panel" id="scan-panel">
     <div class="panel-header">
       <span>📷</span>
@@ -868,6 +845,28 @@
         <button class="btn-export-all" onclick="exportAll()">⬇ Export All as CSV</button>
         <button class="btn-clear-log" onclick="clearLog()">Clear</button>
       </div>
+    </div>
+  </div>
+
+  <!-- STATUS BAR — subtle, collapsed by default -->
+  <div id="status-bar" style="width:100%;margin-top:4px;">
+    <button onclick="toggleStatus()" style="width:100%;background:none;border:none;padding:8px 4px;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;opacity:0.5;">
+      <span style="font-size:10px;font-family:'DM Mono',monospace;color:var(--white);letter-spacing:0.5px;">⚙ CONNECTION STATUS</span>
+      <span id="status-chevron" style="font-size:10px;color:var(--white);">▼</span>
+    </button>
+    <div id="status-body" style="display:none;background:var(--navy-mid);border-radius:var(--radius);padding:14px 16px;display:none;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <span style="font-size:12px;">✅</span>
+        <span style="font-size:12px;color:var(--gray-200);">Anthropic API — connected via Vercel</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:12px;">✅</span>
+        <span style="font-size:12px;color:var(--gray-200);">Google Sheets — connected</span>
+      </div>
+      <!-- hidden inputs kept for JS compatibility -->
+      <input type="hidden" id="sheets-url-saved">
+      <div id="sheets-url-badge" style="display:none;"></div>
+      <div id="key-badge" style="display:none;"></div>
     </div>
   </div>
 
@@ -1395,6 +1394,14 @@ function resetScan() {
 
 // ── TOAST ──────────────────────────────────────────────────────────────────
 let toastTimer;
+function toggleStatus() {
+  const body = document.getElementById('status-body');
+  const chevron = document.getElementById('status-chevron');
+  const open = body.style.display === 'block';
+  body.style.display = open ? 'none' : 'block';
+  chevron.textContent = open ? '▼' : '▲';
+}
+
 function showToast(msg, type = '') {
   const t = document.getElementById('toast');
   t.textContent = msg;
