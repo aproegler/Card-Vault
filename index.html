@@ -931,19 +931,33 @@ function handleFile(e, side) {
 function processFile(file, side) {
   const reader = new FileReader();
   reader.onload = (ev) => {
-    const result = ev.target.result;
-    images[side].base64 = result.split(',')[1];
-    images[side].type = file.type;
+    const img = new Image();
+    img.onload = () => {
+      // Resize to max 1200px on longest side to stay under Vercel's 4.5MB limit
+      const MAX = 1200;
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      images[side].base64 = dataUrl.split(',')[1];
+      images[side].type = 'image/jpeg';
 
-    document.getElementById('preview-img-' + side).src = result;
-    document.getElementById('preview-wrap-' + side).style.display = 'block';
-    document.getElementById('scan-zone-' + side).style.display = 'none';
-    document.getElementById('scan-btns-' + side).style.display = 'none';
+      document.getElementById('preview-img-' + side).src = dataUrl;
+      document.getElementById('preview-wrap-' + side).style.display = 'block';
+      document.getElementById('scan-zone-' + side).style.display = 'none';
+      document.getElementById('scan-btns-' + side).style.display = 'none';
 
-    if (side === 'front') {
-      document.getElementById('back-section').style.display = 'block';
-      document.getElementById('analyze-btn').style.display = 'flex';
-    }
+      if (side === 'front') {
+        document.getElementById('back-section').style.display = 'block';
+        document.getElementById('analyze-btn').style.display = 'flex';
+      }
+    };
+    img.src = ev.target.result;
   };
   reader.readAsDataURL(file);
 }
