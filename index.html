@@ -629,14 +629,24 @@
   <!-- STATUS BANNER -->
   <div class="panel" id="setup-panel">
     <div class="panel-header">
-      <span>✅</span>
-      <h2>Card Vault</h2>
+      <span>⚙️</span>
+      <h2>Settings</h2>
     </div>
     <div class="panel-body">
-      <p style="font-size:13px;color:var(--gray-600);line-height:1.6;">
-        Ready to scan. Your API key is securely stored on the server — nothing is exposed in the browser.
+      <div class="key-saved-badge" id="key-badge" style="display:flex;margin-bottom:12px;">✓ &nbsp;Connected to Anthropic API</div>
+
+      <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--gray-400);margin-bottom:6px;">
+        Google Sheets Web App URL
+      </div>
+      <input type="text" id="sheets-url-saved" placeholder="Paste your Apps Script URL here once and it's saved forever"
+        style="width:100%;padding:10px 12px;border:2px solid var(--gray-200);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;outline:none;color:var(--text);"
+        oninput="saveSheetUrl(this.value)">
+      <p style="font-size:11px;color:var(--gray-400);margin-top:6px;line-height:1.5;">
+        Paste your Apps Script URL once — it's saved in this browser permanently so you never need to enter it again, including on mobile.
       </p>
-      <div class="key-saved-badge" id="key-badge" style="display:flex;margin-top:8px;">✓ &nbsp;Connected to Anthropic API</div>
+      <div id="sheets-url-badge" style="display:none;align-items:center;gap:6px;background:#e8f5ee;color:var(--green);font-size:12px;font-weight:600;padding:6px 12px;border-radius:6px;margin-top:8px;">
+        ✓ &nbsp;Google Sheets connected
+      </div>
     </div>
   </div>
 
@@ -899,6 +909,12 @@ let pendingCard = null;
 
 // ── INIT ──────────────────────────────────────────────────────────────────
 window.onload = () => {
+  // Load saved sheets URL from localStorage
+  const savedUrl = localStorage.getItem('cv_sheets_url') || '';
+  if (savedUrl) {
+    document.getElementById('sheets-url-saved').value = savedUrl;
+    document.getElementById('sheets-url-badge').style.display = 'flex';
+  }
   // drag/drop
   const zone = document.getElementById('scan-zone-front');
   zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragging'); });
@@ -1031,7 +1047,7 @@ async function analyzeCard() {
 }
 
 Rules:
-- rookie must be "YES" or "No". Set to "YES" if the card says "1st Bowman", "RC", "Rookie Card", or any rookie designation
+- rookie: MUST be exactly "YES" or exactly "No" (case sensitive). Set to "YES" if ANY of these appear on the card: "1st Bowman", "1st Bowman Chrome", "RC", "Rookie Card", "Rookie", or any other rookie designation. "1st Bowman" by itself always means rookie = "YES"
 - autograph must be "Yes" or "No"
 - relic must be "Yes" or "No"
 - confidence is 0-100 integer based on how clearly you can read the card
@@ -1255,18 +1271,41 @@ function cardToCSVRow(c) {
 }
 
 // ── LOG TO SHEETS ──────────────────────────────────────────────────────────
+function saveSheetUrl(val) {
+  if (val && val.includes('script.google.com')) {
+    localStorage.setItem('cv_sheets_url', val);
+    document.getElementById('sheets-url-badge').style.display = 'flex';
+  } else {
+    localStorage.removeItem('cv_sheets_url');
+    document.getElementById('sheets-url-badge').style.display = 'none';
+  }
+}
+
 function logToSheets() {
-  const savedUrl = sessionStorage.getItem('cv_sheets_url') || '';
-  document.getElementById('sheets-url-input').value = savedUrl;
-  document.getElementById('sheets-modal').classList.add('open');
+  const savedUrl = localStorage.getItem('cv_sheets_url') || '';
+  if (savedUrl) {
+    // URL already saved — send directly without showing modal
+    sendToSheets(savedUrl);
+  } else {
+    // No URL saved yet — show modal to get it
+    document.getElementById('sheets-url-input').value = '';
+    document.getElementById('sheets-modal').classList.add('open');
+  }
 }
 function closeModal() { document.getElementById('sheets-modal').classList.remove('open'); }
 
 async function confirmSheetsLog() {
   const url = document.getElementById('sheets-url-input').value.trim();
   if (!url.includes('script.google.com')) { showToast('Paste a valid Apps Script URL', 'error'); return; }
-  sessionStorage.setItem('cv_sheets_url', url);
+  // Save to localStorage and update settings panel
+  localStorage.setItem('cv_sheets_url', url);
+  document.getElementById('sheets-url-saved').value = url;
+  document.getElementById('sheets-url-badge').style.display = 'flex';
+  closeModal();
+  sendToSheets(url);
+}
 
+async function sendToSheets(url) {
   const card = readForm();
   const payload = {
     year: card.year, brand: card.brand, series: card.series,
@@ -1276,9 +1315,7 @@ async function confirmSheetsLog() {
     grade: card.grade, grade_company: card.grade_company, condition: card.condition,
     estimated_value: card.estimated_value, notes: card.notes
   };
-
   try {
-    closeModal();
     showToast('Sending to Google Sheets...');
     await fetch(url, {
       method: 'POST',
