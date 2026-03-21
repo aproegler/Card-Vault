@@ -707,6 +707,29 @@
         <span class="confidence-pct" id="conf-pct">—</span>
       </div>
 
+      <!-- TCDB VALIDATION ROW -->
+      <div id="tcdb-row" style="display:none;margin-bottom:10px;border-radius:8px;overflow:hidden;border:1.5px solid var(--gray-200);">
+        <div style="background:var(--navy-mid);padding:8px 14px;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:13px;">🗄</span>
+          <span style="font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:1px;color:var(--gold);">TCDB DATABASE MATCH</span>
+          <span id="tcdb-status" style="margin-left:auto;font-size:11px;color:var(--gray-400);">Searching...</span>
+        </div>
+        <div id="tcdb-body" style="padding:12px 14px;background:var(--white);display:none;">
+          <div id="tcdb-match-info" style="font-size:12px;color:var(--gray-600);margin-bottom:10px;line-height:1.6;"></div>
+          <div id="tcdb-diffs" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
+          <div style="display:flex;gap:8px;">
+            <button onclick="applyTCDB()" id="tcdb-apply-btn"
+              style="flex:1;padding:9px;background:var(--navy);color:white;border:none;border-radius:7px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;">
+              ✓ Use TCDB Data
+            </button>
+            <button onclick="dismissTCDB()"
+              style="padding:9px 14px;background:transparent;border:1.5px solid var(--gray-200);border-radius:7px;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--gray-600);cursor:pointer;">
+              Keep Mine
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div class="ebay-row" id="ebay-row">
         <span class="ebay-icon">🏷</span>
         <div>
@@ -1099,7 +1122,8 @@ Rules:
     document.getElementById('scan-panel').style.display = 'block';
     document.getElementById('result-panel').style.display = 'block';
 
-    // Kick off eBay lookup via Claude
+    // Kick off TCDB validation and eBay lookup in parallel
+    validateWithTCDB(card);
     if (card.ebay_search_query) fetchEbayEstimate(card.ebay_search_query, card);
 
   } catch (err) {
@@ -1171,7 +1195,153 @@ function setChipVal(key, val) {
   });
 }
 
-// ── EBAY ESTIMATE VIA CLAUDE WEB SEARCH ───────────────────────────────────
+// ── TCDB VALIDATION ────────────────────────────────────────────────────────
+let tcdbData = null;
+
+async function validateWithTCDB(card) {
+  const row = document.getElementById('tcdb-row');
+  const status = document.getElementById('tcdb-status');
+  row.style.display = 'block';
+  status.textContent = 'Searching...';
+
+  const searchQuery = [card.player, card.year, card.brand, card.series, card.parallel]
+    .filter(Boolean).join(' ');
+
+  const prompt = `Search the Trading Card Database (tcdb.com) and other card databases for this baseball card: "${searchQuery}".
+Find the most likely match and return ONLY a JSON object with these exact keys:
+{
+  "found": true,
+  "year": "2013",
+  "brand": "Topps",
+  "series": "Fan Favorites",
+  "card_number": "FFA-RR",
+  "player": "Rick Reuschel",
+  "team": "Chicago Cubs",
+  "set_name": "2013 Topps Fan Favorites Autographs",
+  "tcdb_url": "https://www.tcdb.com/...",
+  "notes": "Certified autograph reprint of 1977 Topps design"
+}
+If you cannot find a confident match set "found": false and leave other fields empty.
+Only return fields you are confident about from the database — do not guess.
+Return ONLY the JSON, no other text.`;
+
+  try {
+    const resp = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!resp.ok) throw new Error('Search failed');
+    const data = await resp.json();
+    const textBlock = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+    const match = textBlock.replace(/```json|```/g, '').trim().match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('No JSON');
+    const result = JSON.parse(match[0]);
+
+    if (!result.found) {
+      status.textContent = 'No match found';
+      status.style.color = 'var(--gray-400)';
+      return;
+    }
+
+    // Compare TCDB result vs what Claude extracted from image
+    const currentForm = readForm();
+    const fields = [
+      { key: 'year',        label: 'Year',         form: currentForm.year,        tcdb: result.year },
+      { key: 'brand',       label: 'Brand',        form: currentForm.brand,       tcdb: result.brand },
+      { key: 'series',      label: 'Series',       form: currentForm.series,      tcdb: result.series },
+      { key: 'card_number', label: 'Card #',       form: currentForm.card_number, tcdb: result.card_number },
+      { key: 'player',      label: 'Player',       form: currentForm.player,      tcdb: result.player },
+      { key: 'team',        label: 'Team',         form: currentForm.team,        tcdb: result.team },
+    ];
+
+    const diffs = fields.filter(f =>
+      f.tcdb && f.form &&
+      f.tcdb.trim().toLowerCase() !== f.form.trim().toLowerCase()
+    );
+    const blanks = fields.filter(f => f.tcdb && !f.form);
+
+    tcdbData = result;
+
+    if (diffs.length === 0 && blanks.length === 0) {
+      // Perfect match — just show confirmation, no action needed
+      status.textContent = '✓ Confirmed';
+      status.style.color = '#2db36e';
+      document.getElementById('tcdb-body').style.display = 'block';
+      document.getElementById('tcdb-match-info').innerHTML =
+        `<strong style="color:var(--green)">✓ Database match confirmed</strong><br>${result.set_name || ''}${result.tcdb_url ? ` · <a href="${result.tcdb_url}" target="_blank" style="color:var(--navy-mid)">View on TCDB →</a>` : ''}`;
+      document.getElementById('tcdb-diffs').innerHTML = '';
+      document.getElementById('tcdb-apply-btn').style.display = 'none';
+      return;
+    }
+
+    // Show discrepancies
+    status.textContent = `${diffs.length + blanks.length} discrepancies`;
+    status.style.color = '#e67e22';
+    document.getElementById('tcdb-body').style.display = 'block';
+    document.getElementById('tcdb-match-info').innerHTML =
+      `TCDB found: <strong>${result.set_name || [result.year, result.brand, result.series].filter(Boolean).join(' ')}</strong>${result.tcdb_url ? ` · <a href="${result.tcdb_url}" target="_blank" style="color:var(--navy-mid)">View →</a>` : ''}`;
+
+    const diffsEl = document.getElementById('tcdb-diffs');
+    diffsEl.innerHTML = '';
+    [...diffs, ...blanks].forEach(f => {
+      const div = document.createElement('div');
+      div.style.cssText = 'display:grid;grid-template-columns:70px 1fr 1fr;gap:6px;align-items:center;font-size:11px;padding:6px 8px;background:var(--gray-100);border-radius:6px;';
+      div.innerHTML = `
+        <span style="font-weight:700;color:var(--gray-600);text-transform:uppercase;letter-spacing:0.5px;">${f.label}</span>
+        <span style="color:var(--red);text-decoration:${f.form ? 'line-through' : 'none'};opacity:${f.form ? '0.7' : '0.4'}">${f.form || '(blank)'}</span>
+        <span style="color:var(--green);font-weight:600;">${f.tcdb}</span>
+      `;
+      diffsEl.appendChild(div);
+    });
+
+    // Add a legend
+    const legend = document.createElement('div');
+    legend.style.cssText = 'display:grid;grid-template-columns:70px 1fr 1fr;gap:6px;font-size:10px;color:var(--gray-400);padding:0 8px;';
+    legend.innerHTML = '<span></span><span>From image</span><span>From TCDB</span>';
+    diffsEl.insertBefore(legend, diffsEl.firstChild);
+
+  } catch(err) {
+    status.textContent = 'Lookup failed';
+    status.style.color = 'var(--gray-400)';
+    console.error('TCDB error:', err);
+  }
+}
+
+function applyTCDB() {
+  if (!tcdbData) return;
+  if (tcdbData.year)        document.getElementById('f-year').value = tcdbData.year;
+  if (tcdbData.brand)       document.getElementById('f-brand').value = tcdbData.brand;
+  if (tcdbData.series)      document.getElementById('f-series').value = tcdbData.series;
+  if (tcdbData.card_number) document.getElementById('f-cardnum').value = tcdbData.card_number;
+  if (tcdbData.player)      document.getElementById('f-player').value = tcdbData.player;
+  if (tcdbData.team)        document.getElementById('f-team').value = tcdbData.team;
+  if (tcdbData.notes && !document.getElementById('f-notes').value)
+    document.getElementById('f-notes').value = tcdbData.notes;
+
+  // Update eBay search with corrected data
+  const newQuery = [tcdbData.year, tcdbData.brand, tcdbData.player, tcdbData.series].filter(Boolean).join(' ');
+  fetchEbayEstimate(newQuery, tcdbData);
+
+  document.getElementById('tcdb-status').textContent = '✓ Applied';
+  document.getElementById('tcdb-status').style.color = '#2db36e';
+  document.getElementById('tcdb-apply-btn').style.display = 'none';
+  showToast('TCDB data applied ✓', 'success');
+}
+
+function dismissTCDB() {
+  document.getElementById('tcdb-body').style.display = 'none';
+  document.getElementById('tcdb-status').textContent = 'Dismissed';
+  document.getElementById('tcdb-status').style.color = 'var(--gray-400)';
+}
+
+
 async function fetchEbayEstimate(query, card) {
   document.getElementById('ebay-row').style.display = 'flex';
   document.getElementById('ebay-range').textContent = `Searching: "${query}"`;
@@ -1388,7 +1558,10 @@ function resetScan() {
   document.getElementById('result-panel').style.display = 'none';
   document.getElementById('scan-panel').style.display = 'block';
   document.getElementById('ebay-row').style.display = 'none';
+  document.getElementById('tcdb-row').style.display = 'none';
+  document.getElementById('tcdb-body').style.display = 'none';
   chipState = { rookie: 'No', auto: 'No', relic: 'No' };
+  tcdbData = null;
   pendingCard = null;
 }
 
