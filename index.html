@@ -1031,11 +1031,16 @@ async function analyzeCard() {
 }
 
 Rules:
-- rookie must be "YES" or "No"
+- rookie must be "YES" or "No". Set to "YES" if the card says "1st Bowman", "RC", "Rookie Card", or any rookie designation
 - autograph must be "Yes" or "No"
 - relic must be "Yes" or "No"
 - confidence is 0-100 integer based on how clearly you can read the card
-- ebay_search_query should be a concise eBay search string like "1989 Bowman Ken Griffey Jr rookie PSA 9"
+- year: use the copyright year printed on the card (usually small text on the back or bottom edge), not the design style. Look carefully — Bowman Chrome prospect cards are often printed the year after the prospect was signed, so a 2023 card may look like 2022
+- card_number: use the exact card number printed on the card. Autograph cards often have alpha-numeric numbers like CPA-MBS, BCP-123, etc — use those exactly as printed, not a base card number
+- print_run: ONLY fill this if a specific number is physically stamped or printed on the card (e.g. "50/99" or "/50"). Leave as empty string if no print run is visible — do NOT estimate or assume
+- grade: ONLY fill this if the card is sealed inside a graded slab (PSA, BGS, SGC, etc) with a visible grade number. Leave as empty string for raw ungraded cards — do NOT estimate a grade
+- grade_company: same rule — only fill if card is in a graded slab
+- ebay_search_query: make this a specific sold listings search string including year, brand, player name, and key attributes like "auto" or "1st Bowman". Use the correct year from the card
 - estimated_value should be a number string like "45.00" or empty string if unknown
 - If you cannot read a field clearly, leave it as empty string
 - Do not add any text before or after the JSON`;
@@ -1158,15 +1163,15 @@ async function fetchEbayEstimate(query, card) {
   document.getElementById('ebay-range').textContent = `Searching: "${query}"`;
   document.getElementById('ebay-price').textContent = '⏳';
 
-  const prompt = `Search for recent eBay sold listings for this baseball card: "${query}". 
+  const prompt = `Search eBay SOLD listings (not active listings) for this baseball card: "${query}". Look for completed sales in the last 90 days. Find at least 3-5 sold prices if available and calculate the average, low, and high. 
 Return ONLY a JSON object with these keys:
 {
   "low": "12.00",
   "high": "45.00", 
   "avg": "28.50",
-  "note": "Based on 5 recent sales"
+  "note": "Avg of 5 sold listings, last 90 days"
 }
-All values are USD strings without the $ sign. If you cannot find data, use empty strings.`;
+All values are USD strings without the $ sign. Base the avg on actual sold prices, not asking prices. If you cannot find sold listing data, use empty strings.`;
 
   try {
     const resp = await fetch('/api/scan', {
