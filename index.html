@@ -1,0 +1,1367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Card Vault — Baseball Card Scanner</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #0f2240;
+    --navy-mid: #1a3a5c;
+    --navy-light: #234d78;
+    --gold: #c8a84b;
+    --gold-light: #e8c96a;
+    --cream: #f5f0e8;
+    --red: #c0392b;
+    --green: #1a7a4a;
+    --white: #ffffff;
+    --gray-100: #f0f4f8;
+    --gray-200: #dce4ed;
+    --gray-400: #8fa3b8;
+    --gray-600: #4a6178;
+    --text: #0f2240;
+    --radius: 12px;
+    --shadow: 0 4px 24px rgba(15,34,64,0.13);
+    --shadow-lg: 0 12px 48px rgba(15,34,64,0.2);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--navy);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* ── HEADER ── */
+  header {
+    width: 100%;
+    background: var(--navy);
+    padding: 18px 20px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 2px solid var(--gold);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo-icon {
+    width: 36px; height: 36px;
+    background: var(--gold);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  header h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 26px;
+    letter-spacing: 2px;
+    color: var(--white);
+  }
+  header h1 span { color: var(--gold); }
+  .header-count {
+    margin-left: auto;
+    background: var(--gold);
+    color: var(--navy);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 20px;
+    display: none;
+  }
+
+  /* ── MAIN CONTAINER ── */
+  main {
+    width: 100%;
+    max-width: 540px;
+    padding: 20px 16px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* ── CARD PANELS ── */
+  .panel {
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .panel-header {
+    background: var(--navy-mid);
+    padding: 12px 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-header h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    letter-spacing: 1.5px;
+    color: var(--gold);
+  }
+  .panel-body { padding: 16px; }
+
+  /* ── API KEY SETUP ── */
+  #setup-panel .setup-note {
+    font-size: 12px;
+    color: var(--gray-600);
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+  #setup-panel input {
+    width: 100%;
+    padding: 11px 14px;
+    border: 2px solid var(--gray-200);
+    border-radius: 8px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+    transition: border-color .2s;
+    margin-top: 4px;
+  }
+  #setup-panel input:focus { border-color: var(--gold); }
+  .btn-save-key {
+    margin-top: 10px;
+    width: 100%;
+    padding: 11px;
+    background: var(--navy);
+    color: var(--white);
+    border: none;
+    border-radius: 8px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .2s;
+  }
+  .btn-save-key:hover { background: var(--navy-mid); }
+  .key-saved-badge {
+    display: none;
+    align-items: center; gap: 6px;
+    background: #e8f5ee;
+    color: var(--green);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 6px;
+    margin-top: 10px;
+  }
+
+  /* ── SCAN ZONE ── */
+  .scan-zone {
+    border: 2.5px dashed var(--gray-200);
+    border-radius: 10px;
+    padding: 28px 20px;
+    text-align: center;
+    transition: all .2s;
+    cursor: pointer;
+    position: relative;
+    background: var(--gray-100);
+  }
+  .scan-zone:hover { border-color: var(--gold); background: #fdf9f0; }
+  .scan-zone.dragging { border-color: var(--gold); background: #fdf9f0; }
+  .scan-zone .scan-icon { font-size: 40px; margin-bottom: 8px; }
+  .scan-zone h3 { font-size: 15px; font-weight: 600; color: var(--navy); }
+  .scan-zone p { font-size: 12px; color: var(--gray-400); margin-top: 4px; }
+  #file-input { display: none; }
+
+  .scan-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .btn-scan {
+    padding: 11px 8px;
+    border: 2px solid var(--navy);
+    border-radius: 8px;
+    background: var(--navy);
+    color: var(--white);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    transition: all .2s;
+  }
+  .btn-scan:hover { background: var(--navy-mid); }
+  .btn-scan.secondary {
+    background: transparent;
+    color: var(--navy);
+  }
+  .btn-scan.secondary:hover { background: var(--gray-100); }
+
+  /* ── IMAGE PREVIEW ── */
+  #preview-wrap {
+    display: none;
+    margin-bottom: 14px;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+  }
+  #preview-img {
+    width: 100%;
+    max-height: 280px;
+    object-fit: contain;
+    background: #000;
+    display: block;
+  }
+  .preview-clear {
+    position: absolute; top: 8px; right: 8px;
+    background: rgba(0,0,0,0.6);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 28px; height: 28px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* ── ANALYZE BUTTON ── */
+  .btn-analyze {
+    width: 100%;
+    padding: 14px;
+    background: var(--gold);
+    color: var(--navy);
+    border: none;
+    border-radius: 10px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    transition: all .2s;
+    margin-top: 6px;
+    display: none;
+  }
+  .btn-analyze:hover { background: var(--gold-light); transform: translateY(-1px); }
+  .btn-analyze:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* ── LOADING ── */
+  .loading-wrap {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 24px;
+    background: var(--white);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--gray-200);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-wrap p { font-size: 13px; color: var(--gray-600); font-style: italic; }
+  .loading-stage {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--gold);
+    font-style: normal !important;
+  }
+
+  /* ── RESULT FORM ── */
+  #result-panel { display: none; }
+  .result-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .field-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .field-wrap.full { grid-column: 1 / -1; }
+  .field-wrap label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--gray-400);
+  }
+  .field-wrap input, .field-wrap select, .field-wrap textarea {
+    padding: 9px 11px;
+    border: 2px solid var(--gray-200);
+    border-radius: 8px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+    transition: border-color .2s;
+    background: var(--white);
+    width: 100%;
+  }
+  .field-wrap input:focus,
+  .field-wrap select:focus,
+  .field-wrap textarea:focus { border-color: var(--gold); }
+  .field-wrap textarea { resize: vertical; min-height: 60px; }
+
+  /* confidence badge */
+  .confidence-bar-wrap {
+    margin: 0 0 14px;
+    padding: 10px 14px;
+    background: var(--gray-100);
+    border-radius: 8px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .confidence-label { font-size: 11px; color: var(--gray-600); white-space: nowrap; }
+  .confidence-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--gray-200);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .confidence-fill {
+    height: 100%;
+    background: var(--green);
+    border-radius: 3px;
+    transition: width .6s ease;
+  }
+  .confidence-pct {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--green);
+    white-space: nowrap;
+  }
+
+  /* eBay price pill */
+  .ebay-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px;
+    background: #fff8e7;
+    border: 1.5px solid #f0d87a;
+    border-radius: 8px;
+    margin-bottom: 14px;
+  }
+  .ebay-row .ebay-icon { font-size: 18px; }
+  .ebay-row .ebay-label { font-size: 11px; color: var(--gray-600); }
+  .ebay-row .ebay-price {
+    margin-left: auto;
+    font-family: 'DM Mono', monospace;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--navy);
+  }
+  .ebay-row .ebay-loading { font-size: 11px; color: var(--gray-400); margin-left: auto; }
+
+  /* section divider */
+  .section-label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 13px;
+    letter-spacing: 1.5px;
+    color: var(--navy-mid);
+    border-bottom: 1.5px solid var(--gray-200);
+    padding-bottom: 6px;
+    margin: 14px 0 10px;
+    grid-column: 1 / -1;
+  }
+
+  /* toggle chips */
+  .toggle-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    padding: 5px 12px;
+    border: 1.5px solid var(--gray-200);
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .15s;
+    background: var(--white);
+    color: var(--gray-600);
+  }
+  .chip.active {
+    background: var(--navy);
+    border-color: var(--navy);
+    color: var(--white);
+  }
+
+  /* action buttons */
+  .action-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  .btn-log {
+    padding: 13px;
+    border: none;
+    border-radius: 10px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18px;
+    letter-spacing: 1.5px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: all .2s;
+  }
+  .btn-log.sheets {
+    background: var(--green);
+    color: var(--white);
+  }
+  .btn-log.sheets:hover { background: #15693d; transform: translateY(-1px); }
+  .btn-log.csv {
+    background: var(--navy);
+    color: var(--white);
+  }
+  .btn-log.csv:hover { background: var(--navy-mid); transform: translateY(-1px); }
+  .btn-log:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  .btn-rescan {
+    grid-column: 1 / -1;
+    padding: 10px;
+    background: transparent;
+    border: 2px solid var(--gray-200);
+    border-radius: 10px;
+    color: var(--gray-600);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .btn-rescan:hover { border-color: var(--navy); color: var(--navy); }
+
+  /* ── COLLECTION LOG ── */
+  #log-panel { display: none; }
+  .log-list { display: flex; flex-direction: column; gap: 8px; }
+  .log-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px;
+    background: var(--gray-100);
+    border-radius: 8px;
+    border-left: 3px solid var(--gold);
+    animation: slideIn .3s ease;
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  .log-item-img {
+    width: 40px; height: 56px;
+    object-fit: cover;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .log-item-info { flex: 1; min-width: 0; }
+  .log-item-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--navy);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .log-item-meta {
+    font-size: 11px;
+    color: var(--gray-600);
+    margin-top: 1px;
+    font-family: 'DM Mono', monospace;
+  }
+  .log-item-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--green);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .log-actions {
+    display: flex; gap: 8px;
+    margin-top: 12px;
+  }
+  .btn-export-all {
+    flex: 1;
+    padding: 10px;
+    background: var(--navy);
+    color: var(--white);
+    border: none;
+    border-radius: 8px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .2s;
+  }
+  .btn-export-all:hover { background: var(--navy-mid); }
+  .btn-clear-log {
+    padding: 10px 14px;
+    background: transparent;
+    border: 2px solid var(--gray-200);
+    border-radius: 8px;
+    color: var(--gray-400);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--navy);
+    color: var(--white);
+    padding: 12px 24px;
+    border-radius: 24px;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: var(--shadow-lg);
+    transition: transform .3s ease;
+    z-index: 999;
+    white-space: nowrap;
+    border: 1.5px solid var(--gold);
+  }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #toast.success { background: var(--green); border-color: #2db36e; }
+  #toast.error { background: var(--red); border-color: #e74c3c; }
+
+  /* ── GOOGLE SHEETS MODAL ── */
+  #sheets-modal {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(10,20,35,0.7);
+    z-index: 200;
+    align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  #sheets-modal.open { display: flex; }
+  .modal-box {
+    background: var(--white);
+    border-radius: 16px;
+    padding: 24px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: var(--shadow-lg);
+  }
+  .modal-box h3 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 20px;
+    letter-spacing: 1.5px;
+    color: var(--navy);
+    margin-bottom: 6px;
+  }
+  .modal-box p {
+    font-size: 12px;
+    color: var(--gray-600);
+    line-height: 1.6;
+    margin-bottom: 14px;
+  }
+  .modal-box input {
+    width: 100%;
+    padding: 10px 13px;
+    border: 2px solid var(--gray-200);
+    border-radius: 8px;
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    outline: none;
+    transition: border-color .2s;
+    margin-bottom: 10px;
+  }
+  .modal-box input:focus { border-color: var(--gold); }
+  .modal-btns { display: flex; gap: 8px; }
+  .modal-btns button {
+    flex: 1;
+    padding: 11px;
+    border-radius: 8px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all .2s;
+  }
+  .modal-confirm { background: var(--green); color: white; }
+  .modal-confirm:hover { background: #15693d; }
+  .modal-cancel { background: transparent; border-color: var(--gray-200); color: var(--gray-600); }
+  .modal-cancel:hover { border-color: var(--navy); color: var(--navy); }
+
+  /* ── SHEETS INSTRUCTIONS ── */
+  .sheets-steps {
+    background: var(--gray-100);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 14px;
+  }
+  .sheets-steps ol {
+    padding-left: 16px;
+    font-size: 12px;
+    color: var(--gray-600);
+    line-height: 1.8;
+  }
+  .sheets-steps code {
+    background: var(--white);
+    border: 1px solid var(--gray-200);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--navy);
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (min-width: 480px) {
+    main { padding: 24px 20px 60px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-icon">⚾</div>
+  <h1>CARD <span>VAULT</span></h1>
+  <div class="header-count" id="header-count">0 cards</div>
+</header>
+
+<main>
+
+  <!-- STATUS BANNER -->
+  <div class="panel" id="setup-panel">
+    <div class="panel-header">
+      <span>✅</span>
+      <h2>Card Vault</h2>
+    </div>
+    <div class="panel-body">
+      <p style="font-size:13px;color:var(--gray-600);line-height:1.6;">
+        Ready to scan. Your API key is securely stored on the server — nothing is exposed in the browser.
+      </p>
+      <div class="key-saved-badge" id="key-badge" style="display:flex;margin-top:8px;">✓ &nbsp;Connected to Anthropic API</div>
+    </div>
+  </div>
+
+  <!-- SCAN PANEL -->
+  <div class="panel" id="scan-panel">
+    <div class="panel-header">
+      <span>📷</span>
+      <h2>Scan a Card</h2>
+    </div>
+    <div class="panel-body">
+
+      <!-- FRONT -->
+      <div style="margin-bottom:12px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--gray-400);margin-bottom:6px;">
+          Front of Card <span style="color:var(--red)">*</span>
+        </div>
+        <div id="preview-wrap-front" style="display:none;border-radius:10px;overflow:hidden;position:relative;margin-bottom:8px;">
+          <img id="preview-img-front" src="" alt="Front" style="width:100%;max-height:220px;object-fit:contain;background:#000;display:block;">
+          <button class="preview-clear" onclick="clearImage('front')">✕</button>
+        </div>
+        <div class="scan-zone" id="scan-zone-front" onclick="triggerFile('front','camera')">
+          <div class="scan-icon">🃏</div>
+          <h3>Front of card</h3>
+          <p>Player image side</p>
+        </div>
+        <div class="scan-buttons" id="scan-btns-front">
+          <button class="btn-scan" onclick="triggerFile('front','camera')">📷 Camera</button>
+          <button class="btn-scan secondary" onclick="triggerFile('front','gallery')">🖼 Gallery</button>
+        </div>
+      </div>
+
+      <!-- BACK (shown after front is loaded) -->
+      <div id="back-section" style="display:none;margin-bottom:12px;">
+        <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--gray-400);margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;">
+          <span>Back of Card <span style="color:var(--gray-400);font-weight:400;">(optional — improves accuracy)</span></span>
+          <button onclick="skipBack()" style="font-size:11px;color:var(--gray-400);background:none;border:none;cursor:pointer;text-decoration:underline;">Skip</button>
+        </div>
+        <div id="preview-wrap-back" style="display:none;border-radius:10px;overflow:hidden;position:relative;margin-bottom:8px;">
+          <img id="preview-img-back" src="" alt="Back" style="width:100%;max-height:220px;object-fit:contain;background:#000;display:block;">
+          <button class="preview-clear" onclick="clearImage('back')">✕</button>
+        </div>
+        <div class="scan-zone" id="scan-zone-back" onclick="triggerFile('back','camera')">
+          <div class="scan-icon">🔄</div>
+          <h3>Back of card</h3>
+          <p>Stats, card number, copyright year</p>
+        </div>
+        <div class="scan-buttons" id="scan-btns-back">
+          <button class="btn-scan" onclick="triggerFile('back','camera')">📷 Camera</button>
+          <button class="btn-scan secondary" onclick="triggerFile('back','gallery')">🖼 Gallery</button>
+        </div>
+      </div>
+
+      <!-- hidden file inputs -->
+      <input type="file" id="file-input-front" accept="image/*" onchange="handleFile(event,'front')">
+      <input type="file" id="file-input-back"  accept="image/*" onchange="handleFile(event,'back')">
+
+      <button class="btn-analyze" id="analyze-btn" onclick="analyzeCard()">
+        ⚡ ANALYZE CARD
+      </button>
+    </div>
+  </div>
+
+  <!-- LOADING -->
+  <div class="loading-wrap" id="loading-wrap">
+    <div class="spinner"></div>
+    <p class="loading-stage" id="loading-stage">Reading card image...</p>
+    <p>Claude is scanning your card</p>
+  </div>
+
+  <!-- RESULT PANEL -->
+  <div class="panel" id="result-panel">
+    <div class="panel-header">
+      <span>✏️</span>
+      <h2>Review & Edit Details</h2>
+    </div>
+    <div class="panel-body">
+
+      <div class="confidence-bar-wrap">
+        <span class="confidence-label">AI Confidence</span>
+        <div class="confidence-bar"><div class="confidence-fill" id="conf-fill" style="width:0%"></div></div>
+        <span class="confidence-pct" id="conf-pct">—</span>
+      </div>
+
+      <div class="ebay-row" id="ebay-row">
+        <span class="ebay-icon">🏷</span>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:var(--navy)">eBay Recent Sales</div>
+          <div class="ebay-label" id="ebay-range">Searching...</div>
+        </div>
+        <span class="ebay-loading" id="ebay-price">⏳</span>
+      </div>
+
+      <div class="result-grid" id="result-form">
+
+        <div class="section-label">Card Identity</div>
+
+        <div class="field-wrap">
+          <label>Year</label>
+          <input type="text" id="f-year" placeholder="1989">
+        </div>
+        <div class="field-wrap">
+          <label>Card # in Set</label>
+          <input type="text" id="f-cardnum" placeholder="220">
+        </div>
+        <div class="field-wrap full">
+          <label>Brand / Set</label>
+          <input type="text" id="f-brand" placeholder="Topps Chrome">
+        </div>
+        <div class="field-wrap full">
+          <label>Series / Subset</label>
+          <input type="text" id="f-series" placeholder="Base Set">
+        </div>
+
+        <div class="section-label">Player Info</div>
+
+        <div class="field-wrap full">
+          <label>Player Name</label>
+          <input type="text" id="f-player" placeholder="Ken Griffey Jr.">
+        </div>
+        <div class="field-wrap">
+          <label>Team</label>
+          <input type="text" id="f-team" placeholder="Seattle Mariners">
+        </div>
+        <div class="field-wrap">
+          <label>Position</label>
+          <input type="text" id="f-position" placeholder="OF">
+        </div>
+
+        <div class="section-label">Card Attributes</div>
+
+        <div class="field-wrap full">
+          <label>Parallel / Variation</label>
+          <input type="text" id="f-parallel" placeholder="Gold Refractor /50">
+        </div>
+        <div class="field-wrap">
+          <label>Print Run</label>
+          <input type="text" id="f-printrun" placeholder="50">
+        </div>
+        <div class="field-wrap">
+          <label>Est. Value ($)</label>
+          <input type="number" id="f-value" placeholder="0.00" step="0.01">
+        </div>
+
+        <div class="field-wrap full">
+          <label>Rookie Card?</label>
+          <div class="toggle-chips" id="chips-rookie">
+            <span class="chip" data-val="No" onclick="setChip('rookie','No',this)">No</span>
+            <span class="chip" data-val="YES" onclick="setChip('rookie','YES',this)">YES — Rookie</span>
+          </div>
+        </div>
+        <div class="field-wrap full">
+          <label>Autograph?</label>
+          <div class="toggle-chips" id="chips-auto">
+            <span class="chip" data-val="No" onclick="setChip('auto','No',this)">No</span>
+            <span class="chip" data-val="Yes" onclick="setChip('auto','Yes',this)">Yes — Autograph</span>
+          </div>
+        </div>
+        <div class="field-wrap full">
+          <label>Relic / Patch?</label>
+          <div class="toggle-chips" id="chips-relic">
+            <span class="chip" data-val="No" onclick="setChip('relic','No',this)">No</span>
+            <span class="chip" data-val="Yes" onclick="setChip('relic','Yes',this)">Yes — Relic/Patch</span>
+          </div>
+        </div>
+
+        <div class="section-label">Grading & Condition</div>
+
+        <div class="field-wrap">
+          <label>Grade</label>
+          <input type="text" id="f-grade" placeholder="PSA 9">
+        </div>
+        <div class="field-wrap">
+          <label>Grading Co.</label>
+          <select id="f-gradeco">
+            <option value="">— None —</option>
+            <option>PSA</option><option>BGS</option><option>SGC</option>
+            <option>CGC</option><option>HGA</option>
+          </select>
+        </div>
+        <div class="field-wrap full">
+          <label>Condition (raw)</label>
+          <select id="f-condition">
+            <option value="">— Select —</option>
+            <option>MT 10</option><option>NM-MT 8</option><option>NM 7</option>
+            <option>EX-MT 6</option><option>EX 5</option><option>VG-EX 4</option>
+            <option>VG 3</option><option>Good 2</option><option>Poor 1</option>
+          </select>
+        </div>
+
+        <div class="field-wrap full">
+          <label>Notes</label>
+          <textarea id="f-notes" placeholder="Any additional notes..."></textarea>
+        </div>
+
+      </div><!-- /result-grid -->
+
+      <div class="action-row">
+        <button class="btn-log sheets" onclick="logToSheets()">
+          📊 SHEETS
+        </button>
+        <button class="btn-log csv" onclick="logToCSV()">
+          ⬇ CSV
+        </button>
+        <button class="btn-rescan" onclick="resetScan()">↩ Scan Another Card</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- COLLECTION LOG -->
+  <div class="panel" id="log-panel">
+    <div class="panel-header">
+      <span>📋</span>
+      <h2>Session Log</h2>
+    </div>
+    <div class="panel-body">
+      <div class="log-list" id="log-list"></div>
+      <div class="log-actions">
+        <button class="btn-export-all" onclick="exportAll()">⬇ Export All as CSV</button>
+        <button class="btn-clear-log" onclick="clearLog()">Clear</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- GOOGLE SHEETS MODAL -->
+<div id="sheets-modal">
+  <div class="modal-box">
+    <h3>📊 Log to Google Sheets</h3>
+    <p>To write directly to Google Sheets, you need to set up a Google Apps Script Web App. Here's how:</p>
+    <div class="sheets-steps">
+      <ol>
+        <li>Open your Google Sheet → <strong>Extensions → Apps Script</strong></li>
+        <li>Paste the Apps Script code (copy below) and deploy as a <strong>Web App</strong></li>
+        <li>Set access to <strong>"Anyone"</strong> and copy the Web App URL</li>
+        <li>Paste that URL here ↓</li>
+      </ol>
+    </div>
+    <input type="text" id="sheets-url-input" placeholder="https://script.google.com/macros/s/..." value="">
+    <div style="margin-bottom:12px">
+      <button onclick="copyAppsScript()" style="width:100%;padding:9px;background:var(--gray-100);border:1.5px solid var(--gray-200);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;color:var(--navy-mid);cursor:pointer;">📋 Copy Apps Script Code</button>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-confirm" onclick="confirmSheetsLog()">Send to Sheets</button>
+      <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────────────────
+let images = { front: { base64: '', type: '' }, back: { base64: '', type: '' } };
+let chipState = { rookie: 'No', auto: 'No', relic: 'No' };
+let sessionLog = [];
+let pendingCard = null;
+
+// ── INIT ──────────────────────────────────────────────────────────────────
+window.onload = () => {
+  // drag/drop
+  const zone = document.getElementById('scan-zone-front');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragging'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragging'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('dragging');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) processFile(file, 'front');
+  });
+};
+
+// ── FILE HANDLING ──────────────────────────────────────────────────────────
+function triggerFile(side, mode) {
+  const el = document.getElementById('file-input-' + side);
+  if (mode === 'camera') el.setAttribute('capture', 'environment');
+  else el.removeAttribute('capture');
+  el.click();
+}
+
+// legacy aliases kept in case anything calls them
+function openCamera() { triggerFile('front', 'camera'); }
+function openGallery() { triggerFile('front', 'gallery'); }
+
+function handleFile(e, side) {
+  const file = e.target.files[0];
+  if (file) processFile(file, side);
+}
+
+function processFile(file, side) {
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const result = ev.target.result;
+    images[side].base64 = result.split(',')[1];
+    images[side].type = file.type;
+
+    document.getElementById('preview-img-' + side).src = result;
+    document.getElementById('preview-wrap-' + side).style.display = 'block';
+    document.getElementById('scan-zone-' + side).style.display = 'none';
+    document.getElementById('scan-btns-' + side).style.display = 'none';
+
+    if (side === 'front') {
+      document.getElementById('back-section').style.display = 'block';
+      document.getElementById('analyze-btn').style.display = 'flex';
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearImage(side) {
+  images[side] = { base64: '', type: '' };
+  document.getElementById('preview-wrap-' + side).style.display = 'none';
+  document.getElementById('scan-zone-' + side).style.display = 'block';
+  document.getElementById('scan-btns-' + side).style.display = 'grid';
+  document.getElementById('file-input-' + side).value = '';
+  if (side === 'front') {
+    document.getElementById('back-section').style.display = 'none';
+    document.getElementById('analyze-btn').style.display = 'none';
+    clearImage('back');
+  }
+}
+
+function skipBack() {
+  // hide the back section UI but keep analyze button visible
+  document.getElementById('scan-zone-back').style.display = 'none';
+  document.getElementById('scan-btns-back').style.display = 'none';
+  document.getElementById('back-section').querySelector('div').style.display = 'none';
+}
+
+// ── ANALYZE ────────────────────────────────────────────────────────────────
+async function analyzeCard() {
+  if (!images.front.base64) { showToast('Add the front of the card first', 'error'); return; }
+
+  const hasBack = !!images.back.base64;
+
+  document.getElementById('scan-panel').style.display = 'none';
+  document.getElementById('result-panel').style.display = 'none';
+  const lw = document.getElementById('loading-wrap');
+  lw.style.display = 'flex';
+
+  const stages = [
+    'Reading card image...',
+    'Identifying player and set...',
+    'Extracting card details...',
+    'Estimating value...',
+  ];
+  let si = 0;
+  const stageEl = document.getElementById('loading-stage');
+  const stageInterval = setInterval(() => {
+    si = (si + 1) % stages.length;
+    stageEl.textContent = stages[si];
+  }, 1800);
+
+  const prompt = `You are an expert baseball card grader and collector. Analyze ${hasBack ? 'these two baseball card images (front and back)' : 'this baseball card image (front only)'}  and extract all visible information. Your entire response must be ONLY the JSON object below — no intro sentence, no explanation, no markdown fences, just the raw JSON starting with { and ending with }. Use these exact keys:
+
+{
+  "year": "",
+  "brand": "",
+  "series": "",
+  "card_number": "",
+  "player": "",
+  "team": "",
+  "position": "",
+  "rookie": "No",
+  "parallel": "",
+  "print_run": "",
+  "autograph": "No",
+  "relic": "No",
+  "grade": "",
+  "grade_company": "",
+  "condition": "",
+  "estimated_value": "",
+  "notes": "",
+  "confidence": 85,
+  "ebay_search_query": ""
+}
+
+Rules:
+- rookie must be "YES" or "No"
+- autograph must be "Yes" or "No"
+- relic must be "Yes" or "No"
+- confidence is 0-100 integer based on how clearly you can read the card
+- ebay_search_query should be a concise eBay search string like "1989 Bowman Ken Griffey Jr rookie PSA 9"
+- estimated_value should be a number string like "45.00" or empty string if unknown
+- If you cannot read a field clearly, leave it as empty string
+- Do not add any text before or after the JSON`;
+
+  try {
+    const resp = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: images.front.type, data: images.front.base64 } },
+            ...(hasBack ? [{ type: 'image', source: { type: 'base64', media_type: images.back.type, data: images.back.base64 } }] : []),
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    clearInterval(stageInterval);
+
+    if (!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.error?.message || 'API error');
+    }
+
+    const data = await resp.json();
+    console.log('RAW API RESPONSE:', JSON.stringify(data, null, 2));
+    const raw = data.content.find(b => b.type === 'text')?.text || '{}';
+    console.log('RAW TEXT BLOCK:', raw);
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const jsonMatch = clean.match(/\{[\s\S]*\}/);
+    console.log('JSON MATCH:', jsonMatch?.[0]);
+    if (!jsonMatch) throw new Error('Could not find card data in response. Try a clearer photo.');
+    const card = JSON.parse(jsonMatch[0]);
+
+    populateForm(card);
+    lw.style.display = 'none';
+    document.getElementById('scan-panel').style.display = 'block';
+    document.getElementById('result-panel').style.display = 'block';
+
+    // Kick off eBay lookup via Claude
+    if (card.ebay_search_query) fetchEbayEstimate(card.ebay_search_query, card);
+
+  } catch (err) {
+    clearInterval(stageInterval);
+    lw.style.display = 'none';
+    document.getElementById('scan-panel').style.display = 'block';
+    const msg = err.message || 'Unknown error';
+    showToast(msg.length > 80 ? msg.slice(0, 80) + '…' : msg, 'error');
+    console.error('Full error:', err);
+  }
+}
+
+// ── POPULATE FORM ──────────────────────────────────────────────────────────
+function populateForm(card) {
+  document.getElementById('f-year').value = card.year || '';
+  document.getElementById('f-brand').value = card.brand || '';
+  document.getElementById('f-series').value = card.series || '';
+  document.getElementById('f-cardnum').value = card.card_number || '';
+  document.getElementById('f-player').value = card.player || '';
+  document.getElementById('f-team').value = card.team || '';
+  document.getElementById('f-position').value = card.position || '';
+  document.getElementById('f-parallel').value = card.parallel || '';
+  document.getElementById('f-printrun').value = card.print_run || '';
+  document.getElementById('f-grade').value = card.grade || '';
+  document.getElementById('f-notes').value = card.notes || '';
+  if (card.estimated_value) document.getElementById('f-value').value = card.estimated_value;
+
+  // select dropdowns
+  setSelectVal('f-gradeco', card.grade_company);
+  setSelectVal('f-condition', card.condition);
+
+  // chips
+  setChipVal('rookie', card.rookie === 'YES' ? 'YES' : 'No');
+  setChipVal('auto', card.autograph === 'Yes' ? 'Yes' : 'No');
+  setChipVal('relic', card.relic === 'Yes' ? 'Yes' : 'No');
+
+  // confidence
+  const conf = parseInt(card.confidence) || 0;
+  document.getElementById('conf-fill').style.width = conf + '%';
+  document.getElementById('conf-pct').textContent = conf + '%';
+  if (conf < 60) document.getElementById('conf-fill').style.background = '#e67e22';
+  else if (conf < 80) document.getElementById('conf-fill').style.background = '#f1c40f';
+  else document.getElementById('conf-fill').style.background = 'var(--green)';
+
+  // store for logging
+  pendingCard = card;
+}
+
+function setSelectVal(id, val) {
+  if (!val) return;
+  const el = document.getElementById(id);
+  for (let i = 0; i < el.options.length; i++) {
+    if (el.options[i].value === val || el.options[i].text === val) {
+      el.selectedIndex = i; return;
+    }
+  }
+}
+
+// ── CHIPS ──────────────────────────────────────────────────────────────────
+function setChip(key, val, el) {
+  chipState[key] = val;
+  document.querySelectorAll(`#chips-${key} .chip`).forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+}
+function setChipVal(key, val) {
+  chipState[key] = val;
+  document.querySelectorAll(`#chips-${key} .chip`).forEach(c => {
+    c.classList.toggle('active', c.dataset.val === val);
+  });
+}
+
+// ── EBAY ESTIMATE VIA CLAUDE WEB SEARCH ───────────────────────────────────
+async function fetchEbayEstimate(query, card) {
+  document.getElementById('ebay-row').style.display = 'flex';
+  document.getElementById('ebay-range').textContent = `Searching: "${query}"`;
+  document.getElementById('ebay-price').textContent = '⏳';
+
+  const prompt = `Search for recent eBay sold listings for this baseball card: "${query}". 
+Return ONLY a JSON object with these keys:
+{
+  "low": "12.00",
+  "high": "45.00", 
+  "avg": "28.50",
+  "note": "Based on 5 recent sales"
+}
+All values are USD strings without the $ sign. If you cannot find data, use empty strings.`;
+
+  try {
+    const resp = await fetch('/api/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!resp.ok) throw new Error('Search failed');
+    const data = await resp.json();
+    const textBlock = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+    const clean = textBlock.replace(/```json|```/g, '').trim();
+    const match = clean.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('No JSON');
+    const prices = JSON.parse(match[0]);
+
+    if (prices.avg) {
+      document.getElementById('ebay-price').textContent = `~$${prices.avg}`;
+      document.getElementById('ebay-price').style.color = 'var(--green)';
+      document.getElementById('ebay-range').textContent = `$${prices.low || '?'} – $${prices.high || '?'} · ${prices.note || ''}`;
+      if (!document.getElementById('f-value').value && prices.avg) {
+        document.getElementById('f-value').value = prices.avg;
+      }
+    } else {
+      document.getElementById('ebay-price').textContent = 'No data';
+      document.getElementById('ebay-range').textContent = 'Could not find recent sales';
+    }
+  } catch {
+    document.getElementById('ebay-price').textContent = 'N/A';
+    document.getElementById('ebay-range').textContent = 'Search unavailable';
+  }
+}
+
+// ── READ FORM ──────────────────────────────────────────────────────────────
+function readForm() {
+  return {
+    year: document.getElementById('f-year').value,
+    brand: document.getElementById('f-brand').value,
+    series: document.getElementById('f-series').value,
+    card_number: document.getElementById('f-cardnum').value,
+    player: document.getElementById('f-player').value,
+    team: document.getElementById('f-team').value,
+    position: document.getElementById('f-position').value,
+    rookie: chipState.rookie,
+    parallel: document.getElementById('f-parallel').value,
+    print_run: document.getElementById('f-printrun').value,
+    autograph: chipState.auto,
+    relic: chipState.relic,
+    grade: document.getElementById('f-grade').value,
+    grade_company: document.getElementById('f-gradeco').value,
+    condition: document.getElementById('f-condition').value,
+    estimated_value: document.getElementById('f-value').value,
+    notes: document.getElementById('f-notes').value,
+    image: document.getElementById('preview-img-front').src
+  };
+}
+
+// ── LOG TO CSV ─────────────────────────────────────────────────────────────
+function logToCSV() {
+  const card = readForm();
+  addToLog(card);
+  const row = cardToCSVRow(card);
+  const headers = 'Year,Brand/Set,Series,Card # in Set,Player,Team,Position,Rookie,Parallel,Print Run,Autograph,Relic,Grade,Grading Co.,Condition,Est. Value,Notes\n';
+  const blob = new Blob([headers + row], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `${card.player || 'card'}_${card.year || ''}.csv`; a.click();
+  showToast('CSV downloaded ✓', 'success');
+}
+
+function cardToCSVRow(c) {
+  const fields = [c.year, c.brand, c.series, c.card_number, c.player, c.team,
+    c.position, c.rookie, c.parallel, c.print_run, c.autograph, c.relic,
+    c.grade, c.grade_company, c.condition, c.estimated_value, c.notes];
+  return fields.map(f => `"${(f||'').replace(/"/g,'""')}"`).join(',') + '\n';
+}
+
+// ── LOG TO SHEETS ──────────────────────────────────────────────────────────
+function logToSheets() {
+  const savedUrl = sessionStorage.getItem('cv_sheets_url') || '';
+  document.getElementById('sheets-url-input').value = savedUrl;
+  document.getElementById('sheets-modal').classList.add('open');
+}
+function closeModal() { document.getElementById('sheets-modal').classList.remove('open'); }
+
+async function confirmSheetsLog() {
+  const url = document.getElementById('sheets-url-input').value.trim();
+  if (!url.includes('script.google.com')) { showToast('Paste a valid Apps Script URL', 'error'); return; }
+  sessionStorage.setItem('cv_sheets_url', url);
+
+  const card = readForm();
+  const payload = {
+    year: card.year, brand: card.brand, series: card.series,
+    card_number: card.card_number, player: card.player, team: card.team,
+    position: card.position, rookie: card.rookie, parallel: card.parallel,
+    print_run: card.print_run, autograph: card.autograph, relic: card.relic,
+    grade: card.grade, grade_company: card.grade_company, condition: card.condition,
+    estimated_value: card.estimated_value, notes: card.notes
+  };
+
+  try {
+    closeModal();
+    showToast('Sending to Google Sheets...');
+    await fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      body: JSON.stringify(payload),
+      headers: { 'Content-Type': 'application/json' }
+    });
+    addToLog(card);
+    showToast('Logged to Google Sheets ✓', 'success');
+  } catch (err) {
+    showToast('Sheets error — try CSV instead', 'error');
+  }
+}
+
+// ── APPS SCRIPT CODE ───────────────────────────────────────────────────────
+function copyAppsScript() {
+  const code = `function doPost(e) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Card Catalogue") || SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+  const d = JSON.parse(e.postData.contents);
+  const lastRow = Math.max(sheet.getLastRow(), 3);
+  const newRow = lastRow + 1;
+  const cardNum = newRow - 3;
+  sheet.getRange(newRow, 1, 1, 18).setValues([[
+    cardNum, d.year, d.brand, d.series, d.card_number, d.player,
+    d.team, d.position, d.rookie, d.parallel, d.print_run,
+    d.autograph, d.relic, d.grade, d.grade_company,
+    d.condition, parseFloat(d.estimated_value)||0, d.notes
+  ]]);
+  return ContentService.createTextOutput(JSON.stringify({status:"ok"})).setMimeType(ContentService.MimeType.JSON);
+}`;
+  navigator.clipboard.writeText(code).then(() => showToast('Apps Script code copied ✓', 'success'));
+}
+
+// ── SESSION LOG ────────────────────────────────────────────────────────────
+function addToLog(card) {
+  sessionLog.push(card);
+  renderLog();
+  updateHeaderCount();
+}
+
+function renderLog() {
+  const panel = document.getElementById('log-panel');
+  const list = document.getElementById('log-list');
+  panel.style.display = 'block';
+  list.innerHTML = '';
+  [...sessionLog].reverse().forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'log-item';
+    el.innerHTML = `
+      ${c.image ? `<img class="log-item-img" src="${c.image}" alt="">` : ''}
+      <div class="log-item-info">
+        <div class="log-item-name">${c.player || '—'}</div>
+        <div class="log-item-meta">${c.year || ''} ${c.brand || ''} ${c.card_number ? '#'+c.card_number : ''}</div>
+      </div>
+      ${c.estimated_value ? `<div class="log-item-val">$${parseFloat(c.estimated_value).toFixed(2)}</div>` : ''}
+    `;
+    list.appendChild(el);
+  });
+}
+
+function updateHeaderCount() {
+  const el = document.getElementById('header-count');
+  el.style.display = 'block';
+  el.textContent = sessionLog.length + (sessionLog.length === 1 ? ' card' : ' cards');
+}
+
+function clearLog() {
+  sessionLog = [];
+  document.getElementById('log-panel').style.display = 'none';
+  document.getElementById('header-count').style.display = 'none';
+}
+
+function exportAll() {
+  if (!sessionLog.length) { showToast('No cards in session yet', 'error'); return; }
+  const headers = 'Year,Brand/Set,Series,Card # in Set,Player,Team,Position,Rookie,Parallel,Print Run,Autograph,Relic,Grade,Grading Co.,Condition,Est. Value,Notes\n';
+  const rows = sessionLog.map(cardToCSVRow).join('');
+  const blob = new Blob([headers + rows], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `card_vault_session_${Date.now()}.csv`; a.click();
+  showToast(`Exported ${sessionLog.length} cards ✓`, 'success');
+}
+
+// ── RESET ──────────────────────────────────────────────────────────────────
+function resetScan() {
+  clearImage('front');
+  document.getElementById('result-panel').style.display = 'none';
+  document.getElementById('scan-panel').style.display = 'block';
+  document.getElementById('ebay-row').style.display = 'none';
+  chipState = { rookie: 'No', auto: 'No', relic: 'No' };
+  pendingCard = null;
+}
+
+// ── TOAST ──────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = '', 3000);
+}
+</script>
+</body>
+</html>
