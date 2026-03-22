@@ -1190,11 +1190,25 @@ function setChipVal(key, val) {
   });
 }
 
-// ── TCDB LOOKUP (free — server-side, no Claude API cost) ───────────────────
-let tcdbData = null;
+// ── TCDB + EBAY LINKS (instant, free, no API calls) ────────────────────────
 
 function buildEbayUrl(query) {
   return `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}&LH_Complete=1&LH_Sold=1&_sop=13`;
+}
+
+function buildTCDBSearchUrl(card) {
+  const params = new URLSearchParams();
+  params.set('CardCat', '1'); // Baseball
+  if (card.player)      params.set('Name', card.player);
+  if (card.year)        params.set('Year', card.year);
+  if (card.brand)       params.set('SetName', card.brand + (card.series ? ' ' + card.series : ''));
+  if (card.card_number) params.set('CardNum', card.card_number);
+  return `https://www.tcdb.com/AdvancedSearch.cfm?${params.toString()}`;
+}
+
+function buildTCDBSimpleUrl(card) {
+  const q = [card.player, card.year, card.brand].filter(Boolean).join(' ');
+  return `https://www.tcdb.com/Search.cfm/SearchTerms/${encodeURIComponent(q)}`;
 }
 
 function showEbayLink(query) {
@@ -1208,74 +1222,31 @@ function showEbayLink(query) {
   ebayRange.textContent = `"${query}"`;
 }
 
-async function fetchTCDBAndEbay(card) {
-  // ── Show TCDB as loading ──
-  const tcdbRow = document.getElementById('tcdb-row');
-  const tcdbStatus = document.getElementById('tcdb-status');
-  const tcdbBody = document.getElementById('tcdb-body');
-  const tcdbInfo = document.getElementById('tcdb-match-info');
-  tcdbRow.style.display = 'block';
-  tcdbStatus.textContent = 'Searching...';
-  tcdbStatus.style.color = 'var(--gray-400)';
-
-  // ── Show eBay link immediately (no API call needed) ──
+function fetchTCDBAndEbay(card) {
+  // ── eBay link ──
   const ebayQuery = card.ebay_search_query ||
     [card.player, card.year, card.brand, card.series, card.parallel].filter(Boolean).join(' ');
   showEbayLink(ebayQuery);
 
-  // ── TCDB lookup — just check for a match and provide links ──
-  try {
-    const resp = await fetch('/api/tcdb', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        player: card.player,
-        year: card.year,
-        brand: card.brand,
-        series: card.series,
-        card_number: card.card_number,
-      })
-    });
+  // ── TCDB links (instant — no server call) ──
+  const tcdbRow = document.getElementById('tcdb-row');
+  const tcdbStatus = document.getElementById('tcdb-status');
+  const tcdbBody = document.getElementById('tcdb-body');
+  const tcdbInfo = document.getElementById('tcdb-match-info');
 
-    if (!resp.ok) throw new Error('TCDB lookup failed');
-    const result = await resp.json();
+  tcdbRow.style.display = 'block';
+  tcdbBody.style.display = 'block';
+  tcdbStatus.textContent = 'Verify →';
+  tcdbStatus.style.color = 'var(--gold)';
 
-    tcdbBody.style.display = 'block';
+  const advUrl = buildTCDBSearchUrl(card);
+  const simpleUrl = buildTCDBSimpleUrl(card);
+  const setDesc = [card.year, card.brand, card.series].filter(Boolean).join(' ');
 
-    if (result.found) {
-      tcdbStatus.textContent = '✓ Found';
-      tcdbStatus.style.color = '#2db36e';
-
-      let html = '';
-      if (result.set_name) {
-        html += `<strong>${result.set_name}</strong><br>`;
-      }
-      if (result.tcdb_url) {
-        html += `<a href="${result.tcdb_url}" target="_blank" style="color:var(--navy-mid);font-weight:600;text-decoration:underline;">View card on TCDB →</a>`;
-      }
-      if (result.tcdb_search_url) {
-        html += `${result.tcdb_url ? ' · ' : ''}<a href="${result.tcdb_search_url}" target="_blank" style="color:var(--gray-400);font-size:11px;">Full search results</a>`;
-      }
-      tcdbInfo.innerHTML = html;
-    } else {
-      tcdbStatus.textContent = 'No exact match';
-      tcdbStatus.style.color = 'var(--gray-400)';
-
-      // Still show a search link so the user can look manually
-      const searchUrl = result.tcdb_search_url ||
-        `https://www.tcdb.com/Search.cfm/SearchTerms/${encodeURIComponent([card.player, card.year, card.brand].filter(Boolean).join(' '))}`;
-      tcdbInfo.innerHTML = `No exact match found · <a href="${searchUrl}" target="_blank" style="color:var(--navy-mid);text-decoration:underline;">Search TCDB manually →</a>`;
-    }
-
-  } catch(err) {
-    tcdbStatus.textContent = 'Unavailable';
-    tcdbStatus.style.color = 'var(--gray-400)';
-    // Still provide a manual search link
-    const fallbackUrl = `https://www.tcdb.com/Search.cfm/SearchTerms/${encodeURIComponent([card.player, card.year, card.brand].filter(Boolean).join(' '))}`;
-    tcdbBody.style.display = 'block';
-    tcdbInfo.innerHTML = `Could not reach TCDB · <a href="${fallbackUrl}" target="_blank" style="color:var(--navy-mid);text-decoration:underline;">Search manually →</a>`;
-    console.error('TCDB error:', err);
-  }
+  tcdbInfo.innerHTML =
+    `${setDesc ? `<strong>${setDesc}</strong><br>` : ''}` +
+    `<a href="${advUrl}" target="_blank" style="color:var(--navy-mid);font-weight:600;text-decoration:underline;">Search TCDB (exact) →</a>` +
+    ` · <a href="${simpleUrl}" target="_blank" style="color:var(--gray-400);font-size:11px;">Broad search</a>`;
 }
 
 
